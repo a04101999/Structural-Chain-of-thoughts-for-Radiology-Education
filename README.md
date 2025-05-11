@@ -25,3 +25,13 @@ expert and novice performance, offering a scalable solution for AI-driven di-
 agnostic training. We further contribute a simulated dataset of perceptual
 errors, facilitating future research into multimodal reasoning and educational
 AI in medical imaging
+
+# Simulated Error Dataset:
+
+Due to unavailability of Real world error dataset, this study was conducted on the simulated error dataset:
+
+https://drive.google.com/drive/folders/1RzlGzvJ9Dl01dgrNlhNedY7JWhQ3pmJE?usp=sharing
+
+It contains two files:
+1) Error dataset with missing or masked fixations
+2) Labels for the the cases ( whethere missed or not )
