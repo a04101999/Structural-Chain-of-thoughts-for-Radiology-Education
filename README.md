@@ -1,3 +1,4 @@
+[This repo is still under developement]
 # Structural-Chain-of-thoughts-for-Radiology-Education
 
 Radiology education requires trainees to develop both perceptual and inter-
