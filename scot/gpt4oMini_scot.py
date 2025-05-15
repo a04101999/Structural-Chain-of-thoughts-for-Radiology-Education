@@ -400,7 +400,7 @@ def run_scot_inference(data, saved_scot_results_toJSON):
             skipped_dicom_predictions.add(K[0])
             continue
 
-        print(response)
+        # print(response)
 
         error_assessment = extract_json(response)
 

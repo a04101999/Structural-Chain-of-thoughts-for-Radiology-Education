@@ -171,7 +171,7 @@ def run_zshot_inference(data: dict, zshot_saved_predictions_to_JSON):
             skipped_dicom_predictions.add(K[0])
             continue
 
-        print(response)
+        # print(response)
 
         error_assessment = extract_json(response)
 

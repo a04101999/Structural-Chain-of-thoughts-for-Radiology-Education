@@ -5,6 +5,12 @@ import random
 from polars import DataFrame
 import time
 
+"""
+This script generates a dataset with perceptual errors using the EGD-CXR dataset. 
+https://physionet.org/content/egd-cxr/1.0.0/
+
+"""
+
 
 def contains_valid_timestamps(transcript):
 
@@ -78,10 +84,6 @@ def create_class1_perceptual_error(csv_path: str, removed_sentence_indx: int, ab
     """
     initial_fixations_df = pl.read_csv(os.path.join(csv_path, "fixations.csv"))
 
-    print(abnormality_sentences_with_timestamps[
-        removed_sentence_indx])
-    print("Initial fixations:", initial_fixations_df.shape)
-
     removed_sentence_begin_time = abnormality_sentences_with_timestamps[
         removed_sentence_indx]['begin_time']
     removed_sentence_end_time = abnormality_sentences_with_timestamps[
@@ -89,11 +91,9 @@ def create_class1_perceptual_error(csv_path: str, removed_sentence_indx: int, ab
 
     missed_fixations_df = initial_fixations_df.filter((pl.col('Time (in secs)') >= removed_sentence_begin_time) & (
         pl.col('Time (in secs)') <= removed_sentence_end_time))
-    print("Missed fixations:", missed_fixations_df.shape)
 
     remaining_fixations_df = initial_fixations_df.filter(~((pl.col('Time (in secs)') >= removed_sentence_begin_time) & (
         pl.col('Time (in secs)') <= removed_sentence_end_time)))
-    print("Remaining fixations:", remaining_fixations_df.shape)
 
     return missed_fixations_df, remaining_fixations_df
 
@@ -108,9 +108,6 @@ def create_class2_perceptual_error(csv_path: str, removed_sentence_indx: int, ab
     """
     initial_fixations_df = pl.read_csv(os.path.join(csv_path, "fixations.csv"))
 
-    print(abnormality_sentences_with_timestamps[
-        removed_sentence_indx])
-
     removed_sentence_begin_time = abnormality_sentences_with_timestamps[
         removed_sentence_indx]['begin_time']
     removed_sentence_end_time = abnormality_sentences_with_timestamps[
@@ -121,8 +118,6 @@ def create_class2_perceptual_error(csv_path: str, removed_sentence_indx: int, ab
         (pl.col('Time (in secs)') <= removed_sentence_end_time)
     )
 
-    print(fixations_reduced_df['Time (in secs)', 'FPOGD'])
-
     reduced_fixations_final_output_df = initial_fixations_df.with_columns(
         pl.when((pl.col('Time (in secs)') >= removed_sentence_begin_time)
                 & (pl.col('Time (in secs)') <= removed_sentence_end_time))
@@ -130,11 +125,6 @@ def create_class2_perceptual_error(csv_path: str, removed_sentence_indx: int, ab
         .otherwise(pl.col('FPOGD'))
         .alias('FPOGD')
     )
-
-    print(reduced_fixations_final_output_df.filter(
-        (pl.col('Time (in secs)') >= removed_sentence_begin_time) &
-        (pl.col('Time (in secs)') <= removed_sentence_end_time)
-    )['Time (in secs)', 'FPOGD'])
 
     return fixations_reduced_df, reduced_fixations_final_output_df
 
@@ -153,7 +143,6 @@ def create_both_class1_and_class2_perceptual_error(csv_path: str, abnormality_se
             0, len(abnormality_sentences_with_timestamps) - 1)
 
     initial_fixations_df = pl.read_csv(os.path.join(csv_path, "fixations.csv"))
-    print("Initial Fixations:", initial_fixations_df.shape)
 
     #! Add class 1 perceptual error
     c1_removed_sentence_begin_time = abnormality_sentences_with_timestamps[
@@ -161,18 +150,11 @@ def create_both_class1_and_class2_perceptual_error(csv_path: str, abnormality_se
     c1_removed_sentence_end_time = abnormality_sentences_with_timestamps[
         c1_removed_sentence_indx]['end_time']
 
-    print("Removed Class 1 sentence:", abnormality_sentences_with_timestamps[
-        c1_removed_sentence_indx])
-
     missed_fixations_df = initial_fixations_df.filter((pl.col('Time (in secs)') >= c1_removed_sentence_begin_time) & (
         pl.col('Time (in secs)') <= c1_removed_sentence_end_time))
 
-    print("Missed fixations:", missed_fixations_df.shape)
-
     remaining_fixations_df = initial_fixations_df.filter(~((pl.col('Time (in secs)') >= c1_removed_sentence_begin_time) & (
         pl.col('Time (in secs)') <= c1_removed_sentence_end_time)))
-
-    print("Removed fixations:", remaining_fixations_df.shape)
 
     #! Add class 2 perceptual error
     c2_removed_sentence_begin_time = abnormality_sentences_with_timestamps[
@@ -180,15 +162,10 @@ def create_both_class1_and_class2_perceptual_error(csv_path: str, abnormality_se
     c2_removed_sentence_end_time = abnormality_sentences_with_timestamps[
         c2_removed_sentence_indx]['end_time']
 
-    print("Removed Class 2 sentence:", abnormality_sentences_with_timestamps[
-        c2_removed_sentence_indx])
-
     fixations_reduced_df = remaining_fixations_df.filter(
         (pl.col('Time (in secs)') >= c2_removed_sentence_begin_time) &
         (pl.col('Time (in secs)') <= c2_removed_sentence_end_time)
     )
-
-    print("Fixations reduced", fixations_reduced_df['Time (in secs)', 'FPOGD'])
 
     final_fixations_output_df = remaining_fixations_df.with_columns(
         pl.when((pl.col('Time (in secs)') >= c2_removed_sentence_begin_time)
@@ -197,14 +174,6 @@ def create_both_class1_and_class2_perceptual_error(csv_path: str, abnormality_se
         .otherwise(pl.col('FPOGD'))
         .alias('FPOGD')
     )
-
-    print(final_fixations_output_df.filter(
-        (pl.col('Time (in secs)') >= c2_removed_sentence_begin_time) &
-        (pl.col('Time (in secs)') <= c2_removed_sentence_end_time)
-    )['Time (in secs)', 'FPOGD'])
-
-    print("Final output:", final_fixations_output_df.shape)
-    # print("=====================================================")
 
     return c1_removed_sentence_indx, c2_removed_sentence_indx, missed_fixations_df, remaining_fixations_df, fixations_reduced_df, final_fixations_output_df
 
@@ -356,8 +325,6 @@ def main():
                 print(
                     "================================================================================")
                 continue
-
-            print(correct_abnormality_transcript)
 
             removed_sentence_indx = random.randint(
                 0, len(correct_abnormality_transcript) - 1)
