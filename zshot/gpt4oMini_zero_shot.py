@@ -6,6 +6,9 @@ from openai import OpenAI
 import os
 import random
 
+# Place your OpenAI API key here
+api_key = ""
+
 
 def extract_json(text):
     json_pattern = re.compile(r'{.*?}', re.DOTALL)
@@ -46,8 +49,6 @@ def validate_prediction(prediction: dict):
 
 
 def model_request(system_content: str, prompt: str):
-    # Place your OpenAI API key here
-    api_key = ""
     client = OpenAI(api_key=api_key)
 
     completion = client.chat.completions.create(
@@ -109,6 +110,9 @@ def run_zshot_inference(data: dict, zshot_saved_predictions_to_JSON):
     number_processed = 0
 
     for K in data.items():
+        if K[0] in zshot_saved_predictions_to_JSON:
+            continue
+
         pred_start_time = time.time()
         da = data[K[0]]['correct_data']
 
@@ -202,10 +206,9 @@ def main():
                         help='Path to dataset transcript metadata file', required=True)
     parser.add_argument('--data', type=str,
                         help='Path to transcript data file', required=True)
+    parser.add_argument('--results', type=str,
+                        help='Path to preexisting results file', required=False)
     args = parser.parse_args()
-
-    print(f"Metadata file: {args.metadata}")
-    print(f"Data file: {args.data}")
 
     with open(args.metadata, 'r') as file:
         datalab = json.load(file)
@@ -236,22 +239,28 @@ def main():
     assert sum(len(batch) for batch in batches) == dataset_size
 
     # Run the zero-shot inference and save the results
-
     zshot_saved_predictions_to_JSON = {}
+    results_output_file = args.results if args.results else "gpt4o_mini_zshot_results.json"
+
+    if args.results:
+        with open(args.results, 'r') as file:
+            zshot_saved_predictions_to_JSON = json.load(file)
+
     sample_runtimes = []
     current_batch = 1
 
     for b in batches:
         print("Inference on batch", current_batch)
-        scot_results, scot_skipped_dicom_ids, inference_times = run_zshot_inference(
+        zshot_results, zshot_skipped_dicom_ids, inference_times = run_zshot_inference(
             b, zshot_saved_predictions_to_JSON)
         sample_runtimes.extend(inference_times)
-        print("Results", len(scot_results),
-              "| Skipped", len(scot_skipped_dicom_ids))
+
+        print("Results", len(zshot_results),
+              "| Skipped", len(zshot_skipped_dicom_ids))
         print("--------------------------------------------")
         current_batch += 1
 
-    with open("gpt4o_mini_zshot_results.json", 'w') as file:
+    with open(results_output_file, 'w') as file:
         json.dump(zshot_saved_predictions_to_JSON, file, indent=4)
 
     # Perform a final check to see if all data has been processed
@@ -273,13 +282,13 @@ def main():
 
     while len(zshot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for b in missed_batches:
-            scot_results, scot_skipped_dicom_ids, inference_times = run_zshot_inference(
+            zshot_results, zshot_skipped_dicom_ids, inference_times = run_zshot_inference(
                 b, zshot_saved_predictions_to_JSON)
             sample_runtimes.extend(inference_times)
 
         epochs += 1
 
-    with open("gpt4o_mini_zshot_results.json", 'w') as file:
+    with open(results_output_file, 'w') as file:
         json.dump(zshot_saved_predictions_to_JSON, file, indent=4)
 
     print("DONE | Average Inference runtime", (round(

@@ -2,12 +2,12 @@ import time
 import json
 import argparse
 import re
-from openai import OpenAI
 import os
 import random
+import requests
 import numpy as np
 
-# Place your OpenAI API key here
+# Set your TogetherAI API key here
 api_key = ""
 
 
@@ -50,20 +50,38 @@ def validate_prediction(prediction: dict):
 
 
 def model_request(system_content: str, prompt: str):
+    url = "https://api.together.xyz/v1/chat/completions"
 
-    client = OpenAI(api_key=api_key)
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": prompt}
+    payload = {
+        "model": "mistralai/Mistral-7B-Instruct-v0.3",
+        "messages": [
+            {
+                "role": "system",
+                "content": system_content
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ],
-        temperature=0.2,
-        max_tokens=500
-    )
+        "temperature": 0.2,
+        "max_tokens": 500,
+    }
 
-    return completion.choices[0].message.content
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "authorization": f"Bearer {api_key}"
+    }
+
+    for _ in range(5):
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 503 or response.status_code == 500:
+            time.sleep(1)
+        else:
+            return response.json()
+
+    return None
 
 
 def create_few_shot_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps, ex_experienced_data, ex_inexperienced_data, ex_experienced_time_stamps, ex_inexperienced_time_stamps, ex_correct_output):
@@ -183,6 +201,7 @@ def run_fshot_inference(data: dict, agg_data, datalab, ex_dicom_id: str, fshot_s
 
     inference_times = []
     number_processed = 0
+    is_model_request_error = False
 
     for K in data.items():
         if K[0] in fshot_saved_predictions_to_JSON:
@@ -255,7 +274,14 @@ def run_fshot_inference(data: dict, agg_data, datalab, ex_dicom_id: str, fshot_s
 
         # print(response)
 
-        error_assessment = extract_json(response)
+        if 'error' in response:
+            print("There is an error in with TogetherAI response:",
+                  response['error'])
+
+            is_model_request_error = True
+            return prediction_results, skipped_dicom_predictions, inference_times, is_model_request_error
+
+        error_assessment = extract_json(['choices'][0]['message']['content'])
 
         if error_assessment is None:
             skipped_dicom_predictions.add(K[0])
@@ -270,7 +296,7 @@ def run_fshot_inference(data: dict, agg_data, datalab, ex_dicom_id: str, fshot_s
                 inference_times.append(pred_end_time - pred_start_time)
                 number_processed += 1
 
-    return prediction_results, skipped_dicom_predictions, inference_times
+    return prediction_results, skipped_dicom_predictions, inference_times, is_model_request_error
 
 
 def main():
@@ -321,6 +347,7 @@ def main():
     # Run the few-shot inference and save the results
 
     fshot_saved_predictions_to_JSON = {}
+    results_output_file = args.results if args.results else "mistral_fshot_results.json"
 
     if args.results:
         with open(args.results, 'r') as file:
@@ -328,21 +355,32 @@ def main():
 
     sample_runtimes = []
     current_batch = 1
+    is_model_request_error = False
 
     for b in batches:
         print("Inference on batch", current_batch)
-        fshot_results, fshot_skipped_dicom_ids, inference_times = run_fshot_inference(
+        scot_results, scot_skipped_dicom_ids, inference_times, has_error = run_fshot_inference(
             b, data, datalab, ex_dicom_id, fshot_saved_predictions_to_JSON)
+
+        if has_error:
+            is_model_request_error = True
+            break
+
         sample_runtimes.extend(inference_times)
-        print("Results", len(fshot_results),
-              "| Skipped", len(fshot_skipped_dicom_ids))
+        print("Results", len(scot_results),
+              "| Skipped", len(scot_skipped_dicom_ids))
         print("--------------------------------------------")
         current_batch += 1
 
-    with open("gpt4o_mini_fshot_results.json", 'w') as file:
+    with open(results_output_file, 'w') as file:
         json.dump(fshot_saved_predictions_to_JSON, file, indent=4)
 
     np.save("sample_runtimes.npy", np.array(sample_runtimes))
+
+    if is_model_request_error:
+        print(
+            "There is an error with TogetherAI request no results returned from the model.")
+        return
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
@@ -361,19 +399,28 @@ def main():
 
     epochs = 0
 
-    while len(fshot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
+    while len(fshot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5 and not is_model_request_error:
         for b in missed_batches:
-            fshot_results, fshot_skipped_dicom_ids, inference_times = run_fshot_inference(
+            fshot_results, fshot_skipped_dicom_ids, inference_times, has_error = run_fshot_inference(
                 b, data, datalab, ex_dicom_id, fshot_saved_predictions_to_JSON)
+
+            if has_error:
+                is_model_request_error = True
+                break
 
             sample_runtimes.extend(inference_times)
 
         epochs += 1
 
-    with open("gpt4o_mini_fshot_results.json", 'w') as file:
+    with open(results_output_file, 'w') as file:
         json.dump(fshot_saved_predictions_to_JSON, file, indent=4)
 
     np.save("sample_runtimes.npy", np.array(sample_runtimes))
+
+    if is_model_request_error:
+        print(
+            "There is an error with TogetherAI request no results returned from the model.")
+        return
 
     print("DONE")
 

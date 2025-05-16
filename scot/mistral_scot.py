@@ -2,11 +2,11 @@ import time
 import json
 import argparse
 import re
-from openai import OpenAI
 import random
 import numpy as np
+import requests
 
-# Place your OpenAI API key here
+# Set your TogetherAI API key here
 api_key = ""
 
 
@@ -28,19 +28,38 @@ def extract_json(text):
 
 
 def model_request(system_content: str, prompt: str):
-    client = OpenAI(api_key=api_key)
+    url = "https://api.together.xyz/v1/chat/completions"
 
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": prompt}
+    payload = {
+        "model": "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
+        "messages": [
+            {
+                "role": "system",
+                "content": system_content
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ],
-        temperature=0.2,
-        max_tokens=500
-    )
+        "temperature": 0.2,
+        "max_tokens": 500,
+    }
 
-    return completion.choices[0].message.content
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "authorization": f"Bearer {api_key}"
+    }
+
+    for _ in range(5):
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 503 or response.status_code == 500:
+            time.sleep(1)
+        else:
+            return response.json()
+
+    return None
 
 
 def euclidean_distance(point1, point2):
@@ -338,8 +357,10 @@ def run_scot_inference(data, saved_scot_results_toJSON):
     system_role_prompt = "You are a helpful radiology teaching assistant to provide feedback to the inexperienced radiologist."
     prediction_results = []
     skipped_dicom_predictions = set()
-    processing_times = []
+
+    inference_times = []
     number_processed = 0
+    is_model_request_error = False
 
     for K in data.items():
         if K[0] in saved_scot_results_toJSON:
@@ -403,7 +424,14 @@ def run_scot_inference(data, saved_scot_results_toJSON):
 
         # print(response)
 
-        error_assessment = extract_json(response)
+        if 'error' in response:
+            print("There is an error in with TogetherAI response:",
+                  response['error'])
+
+            is_model_request_error = True
+            return prediction_results, skipped_dicom_predictions, inference_times, is_model_request_error
+
+        error_assessment = extract_json(['choices'][0]['message']['content'])
 
         if error_assessment is None:
             skipped_dicom_predictions.add(K[0])
@@ -419,10 +447,10 @@ def run_scot_inference(data, saved_scot_results_toJSON):
 
                 prediction_results.append(error_assessment)
                 end_time = time.time()
-                processing_times.append(end_time - start_time)
+                inference_times.append(end_time - start_time)
                 number_processed += 1
 
-    return prediction_results, skipped_dicom_predictions, processing_times
+    return prediction_results, skipped_dicom_predictions, inference_times, is_model_request_error
 
 
 def main():
@@ -467,7 +495,7 @@ def main():
     # Run the scot inference and save the results
 
     scot_saved_predictions_to_JSON = {}
-    results_output_file = args.results if args.results else "gpt4o_mini_scot_results.json"
+    results_output_file = args.results if args.results else "mistral_scot_results.json"
 
     if args.results:
         with open(args.results, 'r') as file:
@@ -475,12 +503,18 @@ def main():
 
     sample_runtimes = []
     current_batch = 1
+    is_model_request_error = False
 
     for b in batches:
         print("Inference on batch", current_batch)
-        scot_results, scot_skipped_dicom_ids, inference_times = run_scot_inference(
+        scot_results, scot_skipped_dicom_ids, inference_times, has_error = run_scot_inference(
             b, scot_saved_predictions_to_JSON)
+
         sample_runtimes.extend(inference_times)
+
+        if has_error:
+            is_model_request_error = True
+            break
 
         print("Results", len(scot_results),
               "| Skipped", len(scot_skipped_dicom_ids))
@@ -491,6 +525,11 @@ def main():
         json.dump(scot_saved_predictions_to_JSON, file, indent=4)
 
     np.save("sample_runtimes.npy", np.array(sample_runtimes))
+
+    if is_model_request_error:
+        print(
+            "There is an error with TogetherAI request no results returned from the model.")
+        return
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
@@ -509,11 +548,15 @@ def main():
 
     epochs = 0
 
-    while len(scot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
+    while len(scot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5 and not is_model_request_error:
         for b in missed_batches:
-            scot_results, scot_skipped_dicom_ids, inference_times = run_scot_inference(
+            scot_results, scot_skipped_dicom_ids, inference_times, has_error = run_scot_inference(
                 b, scot_saved_predictions_to_JSON)
             sample_runtimes.extend(inference_times)
+
+            if has_error:
+                is_model_request_error = True
+                break
 
         epochs += 1
 
@@ -521,6 +564,11 @@ def main():
         json.dump(scot_saved_predictions_to_JSON, file, indent=4)
 
     np.save("sample_runtimes.npy", np.array(sample_runtimes))
+
+    if is_model_request_error:
+        print(
+            "There is an error with TogetherAI request no results returned from the model.")
+        return
 
     print("DONE")
 
