@@ -42,7 +42,7 @@ https://drive.google.com/drive/folders/1RzlGzvJ9Dl01dgrNlhNedY7JWhQ3pmJE?usp=sha
 It contains two files:
 
 1. Error dataset with missing or masked fixations
-2. Labels for the the cases ( whether they ar missed or not )
+2. Labels for the the cases
 
 ## Dataset Generation
 
