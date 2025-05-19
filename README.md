@@ -52,7 +52,7 @@ This dataset was derived from the [EGD-CXR](https://physionet.org/content/egd-cx
 python3 egd_cxr_processing.py
 ```
 
-We have already provided the respective folders in the `dataset_generation` directory and simply running the `egd_cxr_processing.py` file will generate the synthesized error dataset.
+For convenience we have provided the respective folders in the `dataset_generation` directory and simply running the `egd_cxr_processing.py` file will generate the synthesized error dataset.
 
 # Usage <a name="usage"></a>
 
