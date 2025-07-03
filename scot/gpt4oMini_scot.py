@@ -5,9 +5,13 @@ import re
 from openai import OpenAI
 import random
 import numpy as np
+import load_dotenv
+import os
 
-# Place your OpenAI API key here
-api_key = ""
+load_dotenv.load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+assert api_key is not None and len(
+    api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
 
 
 def extract_json(text):

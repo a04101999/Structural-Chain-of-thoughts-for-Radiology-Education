@@ -2,13 +2,16 @@ import time
 import json
 import argparse
 import re
-import os
 import random
 import requests
 import numpy as np
+import load_dotenv
+import os
 
-# Set your TogetherAI API key here
-api_key = ""
+load_dotenv.load_dotenv()
+api_key = os.getenv("TOGETHERAI_API_KEY")
+assert api_key is not None and len(
+    api_key) > 0, "Please set the TOGETHERAI_API_KEY environment variable."
 
 
 def extract_json(text):
@@ -53,7 +56,7 @@ def model_request(system_content: str, prompt: str):
     url = "https://api.together.xyz/v1/chat/completions"
 
     payload = {
-        "model": "mistralai/Mistral-7B-Instruct-v0.3",
+        "model": "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
         "messages": [
             {
                 "role": "system",
@@ -345,9 +348,8 @@ def main():
     assert sum(len(batch) for batch in batches) == dataset_size
 
     # Run the few-shot inference and save the results
-
     fshot_saved_predictions_to_JSON = {}
-    results_output_file = args.results if args.results else "mistral_fshot_results.json"
+    results_output_file = args.results if args.results else "llama_11B_vision_fshot_results.json"
 
     if args.results:
         with open(args.results, 'r') as file:
@@ -359,7 +361,7 @@ def main():
 
     for b in batches:
         print("Inference on batch", current_batch)
-        scot_results, scot_skipped_dicom_ids, inference_times, has_error = run_fshot_inference(
+        fshot_results, fshot_skipped_dicom_ids, inference_times, has_error = run_fshot_inference(
             b, data, datalab, ex_dicom_id, fshot_saved_predictions_to_JSON)
 
         if has_error:
@@ -367,8 +369,8 @@ def main():
             break
 
         sample_runtimes.extend(inference_times)
-        print("Results", len(scot_results),
-              "| Skipped", len(scot_skipped_dicom_ids))
+        print("Results", len(fshot_results),
+              "| Skipped", len(fshot_skipped_dicom_ids))
         print("--------------------------------------------")
         current_batch += 1
 
