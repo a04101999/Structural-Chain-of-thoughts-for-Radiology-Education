@@ -5,10 +5,10 @@ import re
 import random
 import numpy as np
 import requests
-import load_dotenv
+from dotenv import load_dotenv
 import os
 
-load_dotenv.load_dotenv()
+load_dotenv()
 api_key = os.getenv("TOGETHERAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the TOGETHERAI_API_KEY environment variable."

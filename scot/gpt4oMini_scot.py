@@ -5,10 +5,10 @@ import re
 from openai import OpenAI
 import random
 import numpy as np
-import load_dotenv
+from dotenv import load_dotenv
 import os
 
-load_dotenv.load_dotenv()
+load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
@@ -340,16 +340,13 @@ def validate_prediction(prediction: dict):
 
 def run_scot_inference(data, saved_scot_results_toJSON):
     system_role_prompt = "You are a helpful radiology teaching assistant to provide feedback to the inexperienced radiologist."
-    prediction_results = []
-    skipped_dicom_predictions = set()
-    processing_times = []
     number_processed = 0
 
     for K in data.items():
         if K[0] in saved_scot_results_toJSON:
             continue
 
-        start_time = time.time()
+        pred_start_time = time.time()
 
         da = data[K[0]]['correct_data']
         result = [
@@ -402,7 +399,6 @@ def run_scot_inference(data, saved_scot_results_toJSON):
         response = model_request(system_role_prompt, prompt)
 
         if response is None:
-            skipped_dicom_predictions.add(K[0])
             continue
 
         # print(response)
@@ -410,23 +406,17 @@ def run_scot_inference(data, saved_scot_results_toJSON):
         error_assessment = extract_json(response)
 
         if error_assessment is None:
-            skipped_dicom_predictions.add(K[0])
+            # print("Error in extracting JSON from response.")
             continue
-        else:
-            if not validate_prediction(error_assessment):
-                skipped_dicom_predictions.add(K[0])
-            else:
-                # print(K[0], error_assessment)
 
-                if K[0] not in saved_scot_results_toJSON:
-                    saved_scot_results_toJSON[K[0]] = error_assessment
-
-                prediction_results.append(error_assessment)
-                end_time = time.time()
-                processing_times.append(end_time - start_time)
-                number_processed += 1
-
-    return prediction_results, skipped_dicom_predictions, processing_times
+        if validate_prediction(error_assessment):
+            pred_end_time = time.time()
+            saved_scot_results_toJSON[K[0]] = error_assessment
+            saved_scot_results_toJSON[K[0]
+                                      ]['inference_time'] = pred_end_time - pred_start_time
+            print(K[0], "processed in", pred_end_time -
+                  pred_start_time, "seconds.")
+            number_processed += 1
 
 
 def main():
@@ -465,6 +455,7 @@ def main():
 
     print("Batch Size", batch_size, "| Last Batch Size", len(batches[-1]))
     print("Total Number of Samples", sum(len(batch) for batch in batches))
+    print("===============================================\n")
 
     assert sum(len(batch) for batch in batches) == dataset_size
 
@@ -474,27 +465,30 @@ def main():
     results_output_file = args.results if args.results else "gpt4o_mini_scot_results.json"
 
     if args.results:
+        print("Loading existing results from", args.results)
         with open(args.results, 'r') as file:
             scot_saved_predictions_to_JSON = json.load(file)
 
-    sample_runtimes = []
+        print("Loaded", len(scot_saved_predictions_to_JSON),
+              "existing predictions.")
+        print("===============================================\n")
+
     current_batch = 1
 
     for b in batches:
         print("Inference on batch", current_batch)
-        scot_results, scot_skipped_dicom_ids, inference_times = run_scot_inference(
+        run_scot_inference(
             b, scot_saved_predictions_to_JSON)
-        sample_runtimes.extend(inference_times)
 
-        print("Results", len(scot_results),
-              "| Skipped", len(scot_skipped_dicom_ids))
-        print("--------------------------------------------")
+        print("Completed batch", current_batch)
+        with open(results_output_file, 'w') as file:
+            json.dump(scot_saved_predictions_to_JSON, file, indent=4)
         current_batch += 1
+
+        print("===============================================\n")
 
     with open(results_output_file, 'w') as file:
         json.dump(scot_saved_predictions_to_JSON, file, indent=4)
-
-    np.save("sample_runtimes.npy", np.array(sample_runtimes))
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
@@ -515,16 +509,18 @@ def main():
 
     while len(scot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for b in missed_batches:
-            scot_results, scot_skipped_dicom_ids, inference_times = run_scot_inference(
+            run_scot_inference(
                 b, scot_saved_predictions_to_JSON)
-            sample_runtimes.extend(inference_times)
+
+            print(f"Completed batch {i + 1}")
+            with open(results_output_file, 'w') as file:
+                json.dump(scot_saved_predictions_to_JSON, file, indent=4)
+            print("===============================================\n")
 
         epochs += 1
 
     with open(results_output_file, 'w') as file:
         json.dump(scot_saved_predictions_to_JSON, file, indent=4)
-
-    np.save("sample_runtimes.npy", np.array(sample_runtimes))
 
     print("DONE")
 
