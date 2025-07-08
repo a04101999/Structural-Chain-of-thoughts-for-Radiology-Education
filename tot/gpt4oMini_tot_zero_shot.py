@@ -6,65 +6,12 @@ from openai import OpenAI
 import random
 import load_dotenv
 import os
+from model_request.req import openai_request, extract_json, validate_prediction
 
 load_dotenv.load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
-
-
-def extract_json(text):
-    json_pattern = re.compile(r'{.*?}', re.DOTALL)
-
-    match = json_pattern.search(text)
-
-    if match:
-        json_str = match.group()
-        if json_str.strip():  # Check if the JSON string is not empty
-            try:
-                json_data = json.loads(json_str)
-                return json_data
-            except json.JSONDecodeError as e:
-                return None
-
-    return None
-
-
-def validate_prediction(prediction: dict):
-    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
-                       'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
-
-    valid_values = {0, 1}  # Set of valid values
-
-    for label in class_labels:
-        if label not in prediction:
-            return False
-
-        try:
-            value = int(prediction[label])
-        except (ValueError, TypeError):
-            return False
-
-        if value not in valid_values:
-            return False
-
-    return True
-
-
-def model_request(system_content: str, prompt: str):
-    client = OpenAI(api_key=api_key)
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.2,
-        max_tokens=500
-    )
-
-    return completion.choices[0].message.content
 
 
 def create_tot_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps):
@@ -121,12 +68,15 @@ def create_tot_prompt(experienced_data, inexperienced_data, experienced_time_sta
     return prompt
 
 
-def run_tot_inference(data: dict, tot_saved_predictions_to_JSON):
+def run_inference(data: dict, saved_predictions_to_JSON: dict):
     system_role_prompt = "You are a helpful teaching assistant to provide feedback to the inexperienced radiologist."
     number_processed = 0
 
+    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
+                       'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
+
     for K in data.items():
-        if K[0] in tot_saved_predictions_to_JSON:
+        if K[0] in saved_predictions_to_JSON:
             continue
 
         pred_start_time = time.time()
@@ -174,7 +124,8 @@ def run_tot_inference(data: dict, tot_saved_predictions_to_JSON):
         prompt = create_tot_prompt(
             experienced_data, inexperienced_data, exp_tran, inexp_tran)
 
-        response = model_request(system_role_prompt, prompt)
+        response = openai_request(system_role_prompt, prompt, api_key,
+                                  model="gpt-4o-mini", temperature=0.2, max_tokens=500)
 
         if response is None:
             # print("Error in response.")
@@ -188,11 +139,11 @@ def run_tot_inference(data: dict, tot_saved_predictions_to_JSON):
             # print("Error in extracting JSON from response.")
             continue
 
-        if validate_prediction(error_assessment):
+        if validate_prediction(error_assessment, class_labels):
             pred_end_time = time.time()
-            tot_saved_predictions_to_JSON[K[0]] = error_assessment
-            tot_saved_predictions_to_JSON[K[0]
-                                          ]['inference_time'] = pred_end_time - pred_start_time
+            saved_predictions_to_JSON[K[0]] = error_assessment
+            saved_predictions_to_JSON[K[0]
+                                      ]['inference_time'] = pred_end_time - pred_start_time
             print(K[0], "processed in", pred_end_time -
                   pred_start_time, "seconds.")
             number_processed += 1
@@ -208,11 +159,6 @@ def parse_args():
     parser.add_argument('--results', type=str,
                         help='Path to preexisting results file', required=False)
     return parser.parse_args()
-
-
-"""
-"c:/Users/Brandon Chung/Desktop/MAARTA/.venv/Scripts/python.exe" "c:/Users/Brandon Chung/Desktop/MAARTA/totcot/gpt4oMini_tot.py" --data ../original_fixation_transcript_data.json --metadata ../original_fixation_transcript_metadata.json --results gpt4o_mini_tot_results.json
-"""
 
 
 def main():
@@ -246,16 +192,16 @@ def main():
     assert sum(len(batch) for batch in batches) == dataset_size
 
     # Run the zero-shot inference and save the results
-    tot_saved_predictions_to_JSON = {}
+    saved_predictions_to_JSON = {}
     results_output_file = args.results if args.results else "gpt4o_mini_tot_zero_shot_results.json"
 
     if args.results:
         print("Loading existing results from", args.results)
 
         with open(args.results, 'r') as file:
-            tot_saved_predictions_to_JSON = json.load(file)
+            saved_predictions_to_JSON = json.load(file)
 
-        print("Loaded", len(tot_saved_predictions_to_JSON),
+        print("Loaded", len(saved_predictions_to_JSON),
               "existing predictions.")
         print("===============================================\n")
 
@@ -263,24 +209,24 @@ def main():
 
     for b in batches:
         print("Inference on batch", current_batch)
-        run_tot_inference(
-            b, tot_saved_predictions_to_JSON)
+        run_inference(
+            b, saved_predictions_to_JSON)
 
         print("Completed batch", current_batch)
         current_batch += 1
         with open(results_output_file, 'w') as file:
-            json.dump(tot_saved_predictions_to_JSON, file, indent=4)
+            json.dump(saved_predictions_to_JSON, file, indent=4)
 
         print("===============================================\n")
 
     with open(results_output_file, 'w') as file:
-        json.dump(tot_saved_predictions_to_JSON, file, indent=4)
+        json.dump(saved_predictions_to_JSON, file, indent=4)
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
 
     for key in random_sampled_data.keys():
-        if key not in tot_saved_predictions_to_JSON.keys():
+        if key not in saved_predictions_to_JSON.keys():
             missed_samples[key] = random_sampled_data[key]
 
     print("Number of missed samples:", len(missed_samples))
@@ -294,20 +240,20 @@ def main():
 
     epochs = 0
 
-    while len(tot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
+    while len(saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for i, b in enumerate(missed_batches):
-            run_tot_inference(
-                b, tot_saved_predictions_to_JSON)
+            run_inference(
+                b, saved_predictions_to_JSON)
 
             print(f"Completed batch {i + 1}")
             with open(results_output_file, 'w') as file:
-                json.dump(tot_saved_predictions_to_JSON, file, indent=4)
+                json.dump(saved_predictions_to_JSON, file, indent=4)
             print("===============================================\n")
 
         epochs += 1
 
     with open(results_output_file, 'w') as file:
-        json.dump(tot_saved_predictions_to_JSON, file, indent=4)
+        json.dump(saved_predictions_to_JSON, file, indent=4)
 
     print("DONE")
 

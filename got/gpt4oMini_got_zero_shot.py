@@ -1,70 +1,15 @@
 import time
 import json
 import argparse
-import re
-from openai import OpenAI
 import random
 from dotenv import load_dotenv
 import os
+from model_request.req import openai_request, extract_json, validate_prediction
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
-
-
-def extract_json(text):
-    json_pattern = re.compile(r'{.*?}', re.DOTALL)
-
-    match = json_pattern.search(text)
-
-    if match:
-        json_str = match.group()
-        if json_str.strip():  # Check if the JSON string is not empty
-            try:
-                json_data = json.loads(json_str)
-                return json_data
-            except json.JSONDecodeError as e:
-                return None
-
-    return None
-
-
-def validate_prediction(prediction: dict):
-    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
-                       'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
-
-    valid_values = {0, 1}  # Set of valid values
-
-    for label in class_labels:
-        if label not in prediction:
-            return False
-
-        try:
-            value = int(prediction[label])
-        except (ValueError, TypeError):
-            return False
-
-        if value not in valid_values:
-            return False
-
-    return True
-
-
-def model_request(system_content: str, prompt: str):
-    client = OpenAI(api_key=api_key)
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.2,
-        max_tokens=500
-    )
-
-    return completion.choices[0].message.content
 
 
 def create_got_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps):
@@ -122,27 +67,20 @@ def create_got_prompt(experienced_data, inexperienced_data, experienced_time_sta
     return prompt
 
 
-def run_got_inference(data: dict, got_saved_predictions_to_JSON):
+def run_inference(data: dict, saved_predictions_to_JSON: dict):
     system_role_prompt = "You are a helpful teaching assistant to provide feedback to the inexperienced radiologist."
     number_processed = 0
 
+    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
+                       'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
+
     for K in data.items():
-        if K[0] in got_saved_predictions_to_JSON:
+        if K[0] in saved_predictions_to_JSON:
             continue
 
         pred_start_time = time.time()
         da = data[K[0]]['correct_data']
 
-        result = [
-            {
-                'X_ORIGINAL': da['X_ORIGINAL'][i],
-                'Y_ORIGINAL': da['Y_ORIGINAL'][i],
-                'FPOGD': da['FPOGD'][i],
-                'Time (in secs)': da['Time (in secs)'][i]
-            }
-            for i in range(len(da['X_ORIGINAL']))
-        ]
-        exp_fix = result.copy()
         s = ''
         exp_tran = da['transcript']
         for i in exp_tran:
@@ -185,7 +123,8 @@ def run_got_inference(data: dict, got_saved_predictions_to_JSON):
         prompt = create_got_prompt(
             experienced_data, inexperienced_data, exp_tran, inexp_tran)
 
-        response = model_request(system_role_prompt, prompt)
+        response = openai_request(system_role_prompt, prompt, api_key,
+                                  model="gpt-4o-mini", temperature=0.2, max_tokens=500)
 
         if response is None:
             # print("Error in response.")
@@ -198,12 +137,12 @@ def run_got_inference(data: dict, got_saved_predictions_to_JSON):
         if error_assessment is None:
             # print("Error in extracting JSON from response.")
             continue
-        elif validate_prediction(error_assessment):
-            # print(K[0], error_assessment)
+
+        if validate_prediction(error_assessment, class_labels):
             pred_end_time = time.time()
-            got_saved_predictions_to_JSON[K[0]] = error_assessment
-            got_saved_predictions_to_JSON[K[0]
-                                          ]['inference_time'] = pred_end_time - pred_start_time
+            saved_predictions_to_JSON[K[0]] = error_assessment
+            saved_predictions_to_JSON[K[0]
+                                      ]['inference_time'] = pred_end_time - pred_start_time
             print(K[0], "processed in", pred_end_time -
                   pred_start_time, "seconds.")
             number_processed += 1
@@ -266,7 +205,7 @@ def main():
 
     for b in batches:
         print("Inference on batch", current_batch)
-        run_got_inference(
+        run_inference(
             b, got_saved_predictions_to_JSON)
 
         print("Completed batch", current_batch)
@@ -299,7 +238,7 @@ def main():
 
     while len(got_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for i, b in enumerate(missed_batches):
-            run_got_inference(
+            run_inference(
                 b, got_saved_predictions_to_JSON)
 
             print(f"Completed batch {i + 1}")
