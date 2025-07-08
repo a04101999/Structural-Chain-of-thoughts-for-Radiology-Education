@@ -4,10 +4,10 @@ import argparse
 import re
 from openai import OpenAI
 import random
-from dotenv import load_dotenv
+import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv.load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
@@ -67,9 +67,9 @@ def model_request(system_content: str, prompt: str):
     return completion.choices[0].message.content
 
 
-def create_got_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps):
+def create_tot_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps):
     prompt = f"""
-    You are an expert AI assistant analyzing radiologist behavior using eye gaze and transcript data. Your task is to identify whether the inexperienced radiologist missed any abnormalities and why — using a **Graph of Thoughts** reasoning strategy.
+    You are an expert radiology educator AI comparing findings and eye gaze patterns of two radiologists to identify missed abnormalities.
     
     ---
     
@@ -90,59 +90,48 @@ def create_got_prompt(experienced_data, inexperienced_data, experienced_time_sta
     ---
     
     ### Task:
-    Use a **Graph of Thoughts** reasoning process:
+    Compare the findings, time-stamped text, and eye gaze data on the same medical imaging of both radiologists to address the following provided below:
     
-    #### Step 1: Construct nodes for each possible explanation:
+    1. Identify missed findings by the inexperienced radiologist.
+    2. Analyze fixation and duration patterns to determine differences in focus and attention.
+
+    Use **Tree of Thoughts-style reasoning** to identify and explain the cause of missed findings by the inexperienced radiologist:
+    
+    #### Step 1: Generate 4 possible hypotheses (thoughts) for why a finding may have been missed or if there is no error. For example:
     - A: Missed due to no fixation.
     - B: Missed due to brief fixation.
     - C: Fixated appropriately, but not reported due to incomplete knowledge.
-    - D: Finding is not abnormal / no error.
+    - D: There is no error.
     
-    #### Step 2: For each node, extract supporting or contradicting evidence (fixation duration, timestamps, verbal mention).
+    #### Step 2: For each hypothesis, analyze whether the data supports it based on gaze fixations, durations, and time-stamped text.
     
-    #### Step 3: Construct a reasoning graph by linking nodes that:
-    - Support each other (A → B if one leads to another)
-    - Contradict each other (A ⟷ ¬D)
-    - Share evidence (A ⟷ C if both depend on fixation absence)
-    
-    #### Step 4: Analyze this graph to decide which explanation(s) are most supported.
+    #### Step 3: Choose the most likely explanation(s) and explain why it is more plausible than others.
     
     ---
     
     ### Output:
-    Return your answer as a structured JSON object. Use 1 for Yes and 0 for No:
+    Return your answer as a structured JSON object. Use 1 for Yes and 0 for No.
     {{
         "Missed abnormality due to missing fixation": ,
         "Missed abnormality due to reduced fixation": ,
         "Missed abnormality due to incomplete knowledge": ,
-        "No missing abnormality":
+        "No missing abnormality": 
     }}
     """
-
     return prompt
 
 
-def run_got_inference(data: dict, got_saved_predictions_to_JSON):
+def run_tot_inference(data: dict, tot_saved_predictions_to_JSON):
     system_role_prompt = "You are a helpful teaching assistant to provide feedback to the inexperienced radiologist."
     number_processed = 0
 
     for K in data.items():
-        if K[0] in got_saved_predictions_to_JSON:
+        if K[0] in tot_saved_predictions_to_JSON:
             continue
 
         pred_start_time = time.time()
         da = data[K[0]]['correct_data']
 
-        result = [
-            {
-                'X_ORIGINAL': da['X_ORIGINAL'][i],
-                'Y_ORIGINAL': da['Y_ORIGINAL'][i],
-                'FPOGD': da['FPOGD'][i],
-                'Time (in secs)': da['Time (in secs)'][i]
-            }
-            for i in range(len(da['X_ORIGINAL']))
-        ]
-        exp_fix = result.copy()
         s = ''
         exp_tran = da['transcript']
         for i in exp_tran:
@@ -182,7 +171,7 @@ def run_got_inference(data: dict, got_saved_predictions_to_JSON):
             'durations': fake_durations
         }
 
-        prompt = create_got_prompt(
+        prompt = create_tot_prompt(
             experienced_data, inexperienced_data, exp_tran, inexp_tran)
 
         response = model_request(system_role_prompt, prompt)
@@ -200,30 +189,37 @@ def run_got_inference(data: dict, got_saved_predictions_to_JSON):
             continue
 
         if validate_prediction(error_assessment):
-            # print(K[0], error_assessment)
             pred_end_time = time.time()
-            got_saved_predictions_to_JSON[K[0]] = error_assessment
-            got_saved_predictions_to_JSON[K[0]
+            tot_saved_predictions_to_JSON[K[0]] = error_assessment
+            tot_saved_predictions_to_JSON[K[0]
                                           ]['inference_time'] = pred_end_time - pred_start_time
             print(K[0], "processed in", pred_end_time -
                   pred_start_time, "seconds.")
             number_processed += 1
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(
-        description="Your script description here.")
+        description="Run GPT-4o-Mini inference on TOT dataset.")
     parser.add_argument('--metadata', type=str,
                         help='Path to dataset transcript metadata file', required=True)
     parser.add_argument('--data', type=str,
                         help='Path to transcript data file', required=True)
     parser.add_argument('--results', type=str,
                         help='Path to preexisting results file', required=False)
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+"""
+"c:/Users/Brandon Chung/Desktop/MAARTA/.venv/Scripts/python.exe" "c:/Users/Brandon Chung/Desktop/MAARTA/totcot/gpt4oMini_tot.py" --data ../original_fixation_transcript_data.json --metadata ../original_fixation_transcript_metadata.json --results gpt4o_mini_tot_results.json
+"""
+
+
+def main():
+    args = parse_args()
 
     with open(args.metadata, 'r') as file:
         datalab = json.load(file)
-
     with open(args.data, 'r') as file:
         data = json.load(file)
 
@@ -232,9 +228,8 @@ def main():
 
     random_sampled_data = {key: data[key]
                            for key in random.sample(list(data.keys()), len(data))}
-    assert len(random_sampled_data) == len(data)
-    dataset_size = len(random_sampled_data)
 
+    dataset_size = len(random_sampled_data)
     batch_size = int(dataset_size / 20)
     batches = [{} for _ in range(20)]
 
@@ -251,15 +246,16 @@ def main():
     assert sum(len(batch) for batch in batches) == dataset_size
 
     # Run the zero-shot inference and save the results
-    got_saved_predictions_to_JSON = {}
-    results_output_file = args.results if args.results else "gpt4o_mini_got_results.json"
+    tot_saved_predictions_to_JSON = {}
+    results_output_file = args.results if args.results else "gpt4o_mini_tot_zero_shot_results.json"
 
     if args.results:
         print("Loading existing results from", args.results)
-        with open(args.results, 'r') as file:
-            got_saved_predictions_to_JSON = json.load(file)
 
-        print("Loaded", len(got_saved_predictions_to_JSON),
+        with open(args.results, 'r') as file:
+            tot_saved_predictions_to_JSON = json.load(file)
+
+        print("Loaded", len(tot_saved_predictions_to_JSON),
               "existing predictions.")
         print("===============================================\n")
 
@@ -267,27 +263,27 @@ def main():
 
     for b in batches:
         print("Inference on batch", current_batch)
-        run_got_inference(
-            b, got_saved_predictions_to_JSON)
+        run_tot_inference(
+            b, tot_saved_predictions_to_JSON)
 
         print("Completed batch", current_batch)
-        with open(results_output_file, 'w') as file:
-            json.dump(got_saved_predictions_to_JSON, file, indent=4)
         current_batch += 1
+        with open(results_output_file, 'w') as file:
+            json.dump(tot_saved_predictions_to_JSON, file, indent=4)
 
         print("===============================================\n")
 
     with open(results_output_file, 'w') as file:
-        json.dump(got_saved_predictions_to_JSON, file, indent=4)
+        json.dump(tot_saved_predictions_to_JSON, file, indent=4)
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
 
     for key in random_sampled_data.keys():
-        if key not in got_saved_predictions_to_JSON.keys():
+        if key not in tot_saved_predictions_to_JSON.keys():
             missed_samples[key] = random_sampled_data[key]
 
-    print("Missed samples:", len(missed_samples))
+    print("Number of missed samples:", len(missed_samples))
     print("===============================================\n")
 
     missed_batches = []
@@ -298,20 +294,20 @@ def main():
 
     epochs = 0
 
-    while len(got_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
+    while len(tot_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for i, b in enumerate(missed_batches):
-            run_got_inference(
-                b, got_saved_predictions_to_JSON)
+            run_tot_inference(
+                b, tot_saved_predictions_to_JSON)
 
             print(f"Completed batch {i + 1}")
             with open(results_output_file, 'w') as file:
-                json.dump(got_saved_predictions_to_JSON, file, indent=4)
+                json.dump(tot_saved_predictions_to_JSON, file, indent=4)
             print("===============================================\n")
 
         epochs += 1
 
     with open(results_output_file, 'w') as file:
-        json.dump(got_saved_predictions_to_JSON, file, indent=4)
+        json.dump(tot_saved_predictions_to_JSON, file, indent=4)
 
     print("DONE")
 
