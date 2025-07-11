@@ -122,12 +122,12 @@ def create_few_shot_prompt(experienced_data, inexperienced_data, experienced_tim
     return prompt
 
 
-def run_fshot_inference(current_batch: dict, all_data: dict, metadata: dict, ex_dicom_id: str, saved_predictions_to_JSON: dict):
+def run_inference(current_batch: dict, all_data: dict, metadata: dict, ex_dicom_id: str, saved_predictions_to_JSON: dict):
     system_role_prompt = "You are a helpful teaching assistant to provide feedback to the inexperienced radiologist."
-    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
-                        'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
-
     number_processed = 0
+
+    class_labels = set({'Missed abnormality due to missing fixation', 'Missed abnormality due to reduced fixation',
+                       'Missed abnormality due to incomplete knowledge', 'No missing abnormality'})
 
     for K in current_batch.items():
         if K[0] in saved_predictions_to_JSON:
@@ -251,15 +251,15 @@ def main():
     assert sum(len(batch) for batch in batches) == dataset_size
 
     # Run the zero-shot inference and save the results
-    got_saved_predictions_to_JSON = {}
+    saved_predictions_to_JSON = {}
     results_output_file = args.results if args.results else "gpt4o_mini_few_shot_results.json"
 
     if args.results:
         print("Loading existing results from", args.results)
         with open(args.results, 'r') as file:
-            got_saved_predictions_to_JSON = json.load(file)
+            saved_predictions_to_JSON = json.load(file)
 
-        print("Loaded", len(got_saved_predictions_to_JSON),
+        print("Loaded", len(saved_predictions_to_JSON),
               "existing predictions.")
         print("===============================================\n")
 
@@ -267,24 +267,24 @@ def main():
 
     for b in batches:
         print("Inference on batch", current_batch)
-        run_fshot_inference(
-            b, data, datalab, ex_dicom_id, got_saved_predictions_to_JSON)
+        run_inference(
+            b, data, datalab, ex_dicom_id, saved_predictions_to_JSON)
 
         print("Completed batch", current_batch)
         with open(results_output_file, 'w') as file:
-            json.dump(got_saved_predictions_to_JSON, file, indent=4)
+            json.dump(saved_predictions_to_JSON, file, indent=4)
         current_batch += 1
 
         print("===============================================\n")
 
     with open(results_output_file, 'w') as file:
-        json.dump(got_saved_predictions_to_JSON, file, indent=4)
+        json.dump(saved_predictions_to_JSON, file, indent=4)
 
     # Perform a final check to see if all data has been processed
     missed_samples = {}
 
     for key in random_sampled_data.keys():
-        if key not in got_saved_predictions_to_JSON.keys():
+        if key not in saved_predictions_to_JSON.keys():
             missed_samples[key] = random_sampled_data[key]
 
     print("Missed samples:", len(missed_samples))
@@ -298,20 +298,20 @@ def main():
 
     epochs = 0
 
-    while len(got_saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
+    while len(saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for i, b in enumerate(missed_batches):
-            run_fshot_inference(
-                b, data, datalab, ex_dicom_id, got_saved_predictions_to_JSON)
+            run_inference(
+                b, data, datalab, ex_dicom_id, saved_predictions_to_JSON)
 
             print(f"Completed batch {i + 1}")
             with open(results_output_file, 'w') as file:
-                json.dump(got_saved_predictions_to_JSON, file, indent=4)
+                json.dump(saved_predictions_to_JSON, file, indent=4)
             print("===============================================\n")
 
         epochs += 1
 
     with open(results_output_file, 'w') as file:
-        json.dump(got_saved_predictions_to_JSON, file, indent=4)
+        json.dump(saved_predictions_to_JSON, file, indent=4)
 
     print("DONE")
 
