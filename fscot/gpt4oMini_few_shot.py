@@ -66,6 +66,15 @@ def get_correct_class_labels(fixation_metadata):
     }
 
 
+def get_correct_class_labels(fixation_metadata):
+    return {
+        "Missed abnormality due to missing fixation": fixation_metadata['class_label_1'],
+        "Missed abnormality due to reduced fixation": fixation_metadata['class_label_2'],
+        "Missed abnormality due to incomplete knowledge": fixation_metadata['class_label_3'],
+        "No missing abnormality": 1 if (fixation_metadata['class_label_1'] == 0 and fixation_metadata['class_label_2'] == 0 and fixation_metadata['class_label_3'] == 0) else 0
+    }
+
+
 def create_few_shot_prompt(experienced_data, inexperienced_data, experienced_time_stamps, inexperienced_time_stamps, ex_experienced_data, ex_inexperienced_data, ex_experienced_time_stamps, ex_inexperienced_time_stamps, ex_correct_output):
     prompt = f"""
     Provided is an example of an experienced and inexperienced radiologist's findings, time-stamped text, and eye gaze data on a medical imaging.
