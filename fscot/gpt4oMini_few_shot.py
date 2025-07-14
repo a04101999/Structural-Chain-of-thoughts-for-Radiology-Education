@@ -261,7 +261,7 @@ def main():
 
     # Run the zero-shot inference and save the results
     saved_predictions_to_JSON = {}
-    results_output_file = args.results if args.results else "gpt4o_mini_few_shot_results.json"
+    results_output_file = args.results if args.results else "gpt4o_mini_fscot_results.json"
 
     if args.results:
         print("Loading existing results from", args.results)

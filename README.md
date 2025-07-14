@@ -72,6 +72,14 @@ OPENAI_API_KEY=your_openai_api_key
 TOGETHERAI_API_KEY=your_togetherai_api_key
 ```
 
+## Install Required Packages
+
+To install the required packages run the following command in your terminal:
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Command Line Usage
 
 ```bash
