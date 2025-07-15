@@ -154,7 +154,7 @@ def main():
     for b in batches:
         print("Inference on batch", current_batch)
         run_scot_inference(
-            b, data, datalab, ex_dicom_id, saved_predictions_to_JSON)
+            b, saved_predictions_to_JSON)
 
         print("Completed batch", current_batch)
         with open(results_output_file, 'w') as file:
@@ -187,7 +187,7 @@ def main():
     while len(saved_predictions_to_JSON) < len(random_sampled_data) and epochs < 5:
         for i, b in enumerate(missed_batches):
             run_scot_inference(
-                b, data, datalab, ex_dicom_id, saved_predictions_to_JSON)
+                b, saved_predictions_to_JSON)
 
             print(f"Completed batch {i + 1}")
             with open(results_output_file, 'w') as file:
