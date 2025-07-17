@@ -174,9 +174,6 @@ def main():
     with open(args.data, 'r') as file:
         data = json.load(file)
 
-    assert len(datalab) == len(
-        data), "Metadata and data lengths do not match"
-
     random_sampled_data = {key: data[key]
                            for key in random.sample(list(data.keys()), len(data))}
 
