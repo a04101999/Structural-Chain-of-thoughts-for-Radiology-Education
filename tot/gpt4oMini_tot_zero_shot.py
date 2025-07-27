@@ -161,11 +161,6 @@ def parse_args():
     return parser.parse_args()
 
 
-"""
-"c:/Users/Brandon Chung/Desktop/MAARTA/.venv/Scripts/python.exe" "c:/Users/Brandon Chung/Desktop/MAARTA/totcot/gpt4oMini_tot.py" --data ../original_fixation_transcript_data.json --metadata ../original_fixation_transcript_metadata.json --results gpt4o_mini_tot_results.json
-"""
-
-
 def main():
     args = parse_args()
 
