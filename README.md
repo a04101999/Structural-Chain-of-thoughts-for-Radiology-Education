@@ -36,7 +36,7 @@ python3 egd_cxr_processing.py
 
 For convenience we have provided the respective folders in the `dataset_generation` directory and simply running the `egd_cxr_processing.py` file will generate the synthesized error dataset.
 
-# The SCoT Framework: <a name="framework"></a>
+# Implementation of the SCoT Framework: <a name="framework"></a>
 
 The Python implementation of the SCoT (Structural Chain of Thoughts) framework used to
 identify nuanced multimodal differences by structuring gaze data and diagnostic reasoning
