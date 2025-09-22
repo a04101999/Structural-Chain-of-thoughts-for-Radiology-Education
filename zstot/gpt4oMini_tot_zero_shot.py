@@ -4,11 +4,11 @@ import argparse
 import re
 from openai import OpenAI
 import random
-import load_dotenv
+from dotenv import load_dotenv
 import os
 from model_request.req import openai_request, extract_json, validate_prediction
 
-load_dotenv.load_dotenv()
+load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
     api_key) > 0, "Please set the OPENAI_API_KEY environment variable."
