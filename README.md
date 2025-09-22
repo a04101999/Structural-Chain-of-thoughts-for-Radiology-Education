@@ -54,9 +54,9 @@ For convenience we have provided the respective folders in the `dataset_generati
 
 # The SCoT Framework: <a name="framework"></a>
 
-Functions used to create the SCoT (Structural Chain of Thoughts) framework in order to
+The Python implementation of the SCoT (Structural Chain of Thoughts) framework used to
 identify nuanced multimodal differences by structuring gaze data and diagnostic reasoning
-into a thought graph are located in the `./scot/scot_framework/scot_creation.py` file.
+into a thought graph are located in this [Python file](https://github.com/a04101999/Structural-Chain-of-thoughts-for-Radiology-Education/blob/main/scot/scot_framework/scot_creation.py).
 
 # Usage <a name="usage"></a>
 
