@@ -40,7 +40,7 @@ For convenience we have provided the respective folders in the `dataset_generati
 
 The Python implementation of the SCoT (Structural Chain of Thoughts) framework used to
 identify nuanced multimodal differences by structuring gaze data and diagnostic reasoning
-into a thought graph are located in this [Python file](https://github.com/a04101999/Structural-Chain-of-thoughts-for-Radiology-Education/blob/main/scot/scot_framework/scot_creation.py).
+into a thought graph is located in this [Python file](https://github.com/a04101999/Structural-Chain-of-thoughts-for-Radiology-Education/blob/main/scot/scot_framework/scot_creation.py).
 
 # Usage <a name="usage"></a>
 
