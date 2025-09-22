@@ -6,7 +6,7 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 from model_request.req import openai_request, extract_json, validate_prediction
-from model_request.scot_inference import create_scene_graph_by_sentence, compare_scene_graphs_with_llm
+from scot_framework.scot_creation import create_scene_graph_by_sentence, compare_scene_graphs_with_llm
 
 
 load_dotenv()

@@ -15,22 +15,20 @@ patterns, such as variations in gaze behavior and diagnostic decisions. These
 small yet critical differences in how experts and novices allocate visual at-
 tention can reveal underlying perceptual gaps, which are often overlooked
 by current AI-driven approaches. To address these limitations, we introduce
-Structural Chain of Thoughts (SCoT)—a novel framework that enhances
+Structural Chain of Thoughts (SCoT), a novel framework that enhances
 AI sensitivity to nuanced multimodal differences by structuring gaze data
 and diagnostic reasoning into a thought graph. By leveraging a structural
-prior, SCoT systematically identifies key perceptual and interpretive discrep-
-ancies, allowing models to provide targeted, context-aware feedback. This
+prior, SCoT systematically identifies key perceptual and interpretive discrepancies, allowing models to provide targeted, context-aware feedback. This
 structured approach not only highlights missed findings but also explains
-the reasoning behind perceptual errors, turning them into learning opportu-
-nities. Applied within radiology education, SCoT bridges the gap between
-expert and novice performance, offering a scalable solution for AI-driven di-
-agnostic training. We further contribute a simulated dataset of perceptual
+the reasoning behind perceptual errors, turning them into learning opportunities. Applied within radiology education, SCoT bridges the gap between
+expert and novice performance, offering a scalable solution for AI-driven diagnostic training. We further contribute a simulated dataset of perceptual
 errors, facilitating future research into multimodal reasoning and educational
-AI in medical imaging
+AI in medical imaging.
 
 ## Table of Contents
 
 - [Dataset](#dataset)
+- [SCoT Framework](#framework)
 - [Usage](#usage)
 
 # Simulated Error Dataset: <a name="dataset"></a>
@@ -54,11 +52,17 @@ python3 egd_cxr_processing.py
 
 For convenience we have provided the respective folders in the `dataset_generation` directory and simply running the `egd_cxr_processing.py` file will generate the synthesized error dataset.
 
+# The SCoT Framework: <a name="framework"></a>
+
+Functions used to create the SCoT (Structural Chain of Thoughts) framework in order to
+identify nuanced multimodal differences by structuring gaze data and diagnostic reasoning
+into a thought graph are located in the `./scot/scot_framework/scot_creation.py` file.
+
 # Usage <a name="usage"></a>
 
 Within this repository, we provide python files that utilizes the synthesized perceptual error dataset and evaluates the SCoT framework against standard chain of thought (CoT) prompting in zero-shot and few-shot settings on the synthesized error dataset highlighting its effectiveness in improving multimodal reasoning across different LLM/LMM models. In this study the models used are Mistral-7B-Instruct-v0.3, LLAMA-3.2-11B-Vision-Instruct and GPT-4o-Mini. The Mistral and Llama models are accessed using [together.ai's](https://www.together.ai/) API. GPT-4o-Mini is accessed using [OpenAI's](https://openai.com/api/) API.
 
-- These python files are located in the `./zscot`, `./fscot`, `./scot`, `./tot` and `./got` directories of this repository.
+- These python files are located in the `./zscot`, `./fscot`, `./scot` and `./zstot` directories of this repository.
 - To run these programs you will need a together.ai API key and OpenAI API key to perform requests to these models.
 - These API keys can be obtained by signing up for an account on the respective platforms and following their instructions for generating API keys.
 - The script is designed to be run from the command line and requires Python 3.8 or higher.

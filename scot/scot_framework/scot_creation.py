@@ -1,115 +1,24 @@
-import re
-import json
-from openai import OpenAI
-import time
-import requests
 from typing import Callable
 import numpy as np
-from model_request.req import extract_json, validate_prediction, openai_request, togetherai_request
-
-# system_content: str, prompt: str, api_key: str, model: str = "gpt-4o-mini", temperature: float = 0.2, max_tokens: int = 500
-
-
-def run_inference(data: dict, saved_predictions_to_JSON: dict, create_prompt: Callable[[dict, dict, list, list], str], model_request: str, api_key: str, model: str, class_labels: set) -> None:
-    system_role_prompt = "You are a helpful teaching assistant to provide feedback to the inexperienced radiologist."
-    number_processed = 0
-
-    for K in data.items():
-        if K[0] in saved_predictions_to_JSON:
-            continue
-
-        pred_start_time = time.time()
-        da = data[K[0]]['correct_data']
-
-        result = [
-            {
-                'X_ORIGINAL': da['X_ORIGINAL'][i],
-                'Y_ORIGINAL': da['Y_ORIGINAL'][i],
-                'FPOGD': da['FPOGD'][i],
-                'Time (in secs)': da['Time (in secs)'][i]
-            }
-            for i in range(len(da['X_ORIGINAL']))
-        ]
-        s = ''
-        exp_tran = da['transcript']
-        for i in exp_tran:
-            s = s + i['sentence']
-        fixations_dur = da['FPOGD']
-
-        fixations_exp = list(zip(da['X_ORIGINAL'], da['Y_ORIGINAL']))
-
-        da = data[K[0]]['incorrect_data']
-        if len(da) == 0:
-            da = data[K[0]]['correct_data']
-            si = ''
-            inexp_tran = da['transcript']
-            for i in inexp_tran:
-                si = si + i['sentence']
-            fake_durations = da['FPOGD']
-            fake_fixations = list(zip(da['X_ORIGINAL'], da['Y_ORIGINAL']))
-
-        else:
-            si = ''
-            inexp_tran = da['transcript']
-            for i in inexp_tran:
-                si = si + i['sentence']
-            fake_durations = da['FPOGD']
-            fake_fixations = list(zip(da['X_ORIGINAL'], da['Y_ORIGINAL']))
-
-        # Prepare the data
-        experienced_data = {
-            'transcript': s,
-            'fixations': fixations_exp,
-            'durations': fixations_dur
-        }
-
-        inexperienced_data = {
-            'transcript': si,
-            'fixations': fake_fixations,
-            'durations': fake_durations
-        }
-
-        prompt = create_prompt(
-            experienced_data, inexperienced_data, exp_tran, inexp_tran)
-
-        response = None
-        if model_request == 'openai':
-            response = openai_request(
-                system_role_prompt, prompt, api_key, model, temperature=0.2, max_tokens=500)
-        elif model_request == 'togetherai':
-            response = togetherai_request(
-                system_role_prompt, prompt, api_key, model, temperature=0.2, max_tokens=500)
-
-        if response is None:
-            continue
-
-        error_assessment = extract_json(response)
-
-        if error_assessment is None:
-            continue
-
-        if validate_prediction(error_assessment, class_labels):
-            pred_end_time = time.time()
-            saved_predictions_to_JSON[K[0]] = error_assessment
-            saved_predictions_to_JSON[K[0]
-                                      ]['inference_time'] = pred_end_time - pred_start_time
-            print(K[0], "processed in", pred_end_time -
-                  pred_start_time, "seconds.")
-            number_processed += 1
-
+import time
+from model_request.req import extract_json, validate_prediction
 
 """
-Scot Inference Functions
+Functions used to create the SCoT (Structural Chain of Thoughts) framework in order to
+identify nuanced multimodal differences by structuring gaze data and diagnostic reasoning 
+into a thought graph.
 """
 
 
 def euclidean_distance(point1, point2):
     """Calculate the Euclidean distance between two points."""
+
     return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
 
 def find_closest_times(fixation_data, begin_time, end_time):
     """Find the closest fixation times to the begin and end times of the phrase."""
+
     closest_begin_time = max([fix['Time (in secs)']
                              for fix in fixation_data if fix['Time (in secs)'] <= begin_time], default=None)
     closest_end_time = min([fix['Time (in secs)']
@@ -119,6 +28,7 @@ def find_closest_times(fixation_data, begin_time, end_time):
 
 def create_subgraph(sentence_text, fixation_nodes, sentence_counter):
     """Creates a subgraph for a given set of fixation nodes, including revisit edges."""
+
     subgraph = {
         "Abnormality": sentence_text,
         "nodes": fixation_nodes,
@@ -371,79 +281,3 @@ def compare_scene_graphs_with_llm(scene_graph_exp, scene_graph_inexp):
         """
 
     return prompt
-
-
-def run_scot_inference(data, saved_scot_results_toJSON: dict, model_request: Callable[[str, str], str]) -> None:
-    system_role_prompt = "You are a helpful radiology teaching assistant to provide feedback to the inexperienced radiologist."
-    number_processed = 0
-
-    for K in data.items():
-        if K[0] in saved_scot_results_toJSON:
-            continue
-
-        pred_start_time = time.time()
-
-        da = data[K[0]]['correct_data']
-        result = [
-            {
-                'X_ORIGINAL': da['X_ORIGINAL'][i],
-                'Y_ORIGINAL': da['Y_ORIGINAL'][i],
-                'FPOGD': da['FPOGD'][i],
-                'Time (in secs)': da['Time (in secs)'][i]
-            }
-            for i in range(len(da['X_ORIGINAL']))
-        ]
-        # exp_fix = result.copy()
-        timestamped_report = da['transcript']
-        fixation_data = result
-
-        # Create the scene graph for experienced radiologist
-        scene_graph_output = create_scene_graph_by_sentence(
-            timestamped_report, fixation_data)
-
-        if len(data[K[0]]['incorrect_data']) == 0:
-
-            da = data[K[0]]['correct_data']
-        else:
-            da = data[K[0]]['incorrect_data']
-        result = [
-            {
-                'X_ORIGINAL': da['X_ORIGINAL'][i],
-                'Y_ORIGINAL': da['Y_ORIGINAL'][i],
-                'FPOGD': da['FPOGD'][i],
-                'Time (in secs)': da['Time (in secs)'][i]
-            }
-            for i in range(len(da['X_ORIGINAL']))
-        ]
-        # inexp_fix = result.copy()
-        timestamped_reporti = da['transcript']
-        fixation_datai = result
-
-        # Create the scene graph for inexperienced radiologist
-        scene_graph_outputi = create_scene_graph_by_sentence(
-            timestamped_reporti, fixation_datai)
-
-        scene_graph_exp = scene_graph_output
-        scene_graph_inexp = scene_graph_outputi
-
-        prompt = compare_scene_graphs_with_llm(
-            scene_graph_exp, scene_graph_inexp)
-
-        response = model_request(system_role_prompt, prompt)
-
-        if response is None:
-            continue
-
-        error_assessment = extract_json(response)
-
-        if error_assessment is None:
-            continue
-
-        if validate_prediction(error_assessment):
-            pred_end_time = time.time()
-            saved_scot_results_toJSON[K[0]] = error_assessment
-            saved_scot_results_toJSON[K[0]
-                                      ]['inference_time'] = pred_end_time - pred_start_time
-            print(K[0], "processed in", pred_end_time -
-                  pred_start_time, "seconds.")
-            number_processed += 1
