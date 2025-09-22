@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 import os
 from model_request.req import openai_request, extract_json, validate_prediction
 
+"""
+Zero Shot Tree of Thoughts using GPT 4o 
+"""
+
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 assert api_key is not None and len(
